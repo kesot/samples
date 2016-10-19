@@ -10,7 +10,7 @@ namespace ExchangeRateUpdater
         private const LanguageType language = LanguageType.en;
         private readonly SweaWebService webService = new SweaWebService();
         private bool disposed;
-        
+
         /// <summary>
         ///     Should return exchange rates among the specified currencies that are defined by the source. But only those defined
         ///     by the source, do not return calculated exchange rates. E.g. if the source contains "EUR/USD" but not "USD/EUR",
@@ -29,24 +29,16 @@ namespace ExchangeRateUpdater
             var lastDate = GetLastBankDayWithinLastMonth();
             var previousDate = GetLastBankDayWithinLastMonth(1);
 
-            var crossRates = GetCrossRatesByDates(
+            var crossRates = GetExchangeRates(
                 previousDate,
                 lastDate,
-                CurrencyHelper.GetCurrencyCrossPairs(seriesToCurrenciesMap.Keys.ToList()));
+                CurrencyHelper.GetCurrencyCrossPairs(seriesToCurrenciesMap.Keys.ToList()),
+                seriesToCurrenciesMap);
 
-            return CrossResultToExchangeRates(crossRates, seriesToCurrenciesMap);
+            return crossRates;
         }
 
-        private IEnumerable<ExchangeRate> CrossResultToExchangeRates(CrossResult crossResult,
-            Dictionary<string, Currency> seriesToCurrenciesMap)
-        {
-            return crossResult.groups[0].series.Select(
-                s =>
-                    new ExchangeRate(seriesToCurrenciesMap[s.seriesid1.Trim()],
-                        seriesToCurrenciesMap[s.seriesid2.Trim()],
-                        Convert.ToDecimal(s.resultrows.MaxBy(r => r.date).value)));
-        }
-
+        // may be it's not so good to call it twice..
         private DateTime GetLastBankDayWithinLastMonth(int skipDays = 0)
         {
             var lastDay = webService.getCalendarDays(DateTime.Now.AddDays(-30 - skipDays), DateTime.Now)
@@ -56,7 +48,7 @@ namespace ExchangeRateUpdater
                 .FirstOrDefault();
 
             if (lastDay?.caldate == null)
-                throw new Exception("No bank days was found for last month");
+                throw new InvalidOperationException("No bank days were found");
 
             return lastDay.caldate.Value;
         }
@@ -75,7 +67,11 @@ namespace ExchangeRateUpdater
                 .ToDictionary(x => x.SeriesId, x => x.Currency);
         }
 
-        private CrossResult GetCrossRatesByDates(DateTime dateFrom, DateTime dateTo, CurrencyCrossPair[] crossPairs)
+        private IEnumerable<ExchangeRate> GetExchangeRates(
+            DateTime dateFrom,
+            DateTime dateTo,
+            CurrencyCrossPair[] crossPairs,
+            Dictionary<string, Currency> seriesToCurrenciesMap)
         {
             var crossRates = webService.getCrossRates(new CrossRequestParameters
             {
@@ -85,7 +81,23 @@ namespace ExchangeRateUpdater
                 dateto = dateTo,
                 languageid = LanguageType.en
             });
-            return crossRates;
+
+            if (crossRates.groups == null || crossRates.groups.Length == 0)
+                throw new InvalidOperationException("No groups in response");
+
+            if (crossRates.groups.Length > 1)
+                throw new InvalidOperationException("More than one group returned");
+
+            var group = crossRates.groups[0];
+
+            return group.series
+                .Select(s => new
+                {
+                    SeriesId1 = s.seriesid1.Trim(),
+                    SeriesId2 = s.seriesid2.Trim(),
+                    Value = Convert.ToDecimal(s.resultrows.MaxBy(r => r.date).value)
+                })
+                .Select(s => new ExchangeRate(seriesToCurrenciesMap[s.SeriesId1], seriesToCurrenciesMap[s.SeriesId2], s.Value));
         }
 
         ~RiksExchangeRateProvider()

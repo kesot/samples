@@ -59,6 +59,10 @@
   </ItemGroup>
   <ItemGroup>
     <None Include="packages.config" />
+    <None Include="Wsdl\swea.xsd">
+      <SubType>Designer</SubType>
+    </None>
+    <None Include="Wsdl\sweaWS_ssl.wsdl" />
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <!-- To modify your build process, add your task inside one of the targets below and uncomment it. 
