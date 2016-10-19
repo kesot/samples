@@ -23,8 +23,11 @@ namespace ExchangeRateUpdater
         {
             try
             {
-                var provider = new ExchangeRateProvider();
-                var rates = provider.GetExchangeRates(currencies);
+                IEnumerable<ExchangeRate> rates;
+                using (var provider = new RiksExchangeRateProvider())
+                {
+                    rates = provider.GetExchangeRates(currencies);
+                }
 
                 Console.WriteLine("Successfully retrieved " + rates.Count() + " exchange rates:");
                 foreach (var rate in rates)
